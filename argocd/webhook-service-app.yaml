@@ -1,0 +1,50 @@
+# ==============================================================================
+# ArgoCD Application — Webhook Service GitOps Deployment
+# ==============================================================================
+# - Auto-sync: ArgoCD automatically applies changes from Git
+# - Self-heal: Reverts manual cluster changes to match Git state
+# - Prune: Removes resources deleted from Git
+# ==============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: webhook-service
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: fintech-devsecops
+    app.kubernetes.io/managed-by: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/amannikhare/fintech-devsecops-pipeline
+    targetRevision: HEAD
+    path: helm/webhook-service
+
+    helm:
+      valueFiles:
+        - values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: payments
+
+  syncPolicy:
+    automated:
+      prune: true        # Remove resources not in Git
+      selfHeal: true      # Revert manual changes
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

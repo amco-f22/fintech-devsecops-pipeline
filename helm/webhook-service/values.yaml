@@ -1,0 +1,87 @@
+# Default values for webhook-service Helm chart
+
+replicaCount: 2
+
+image:
+  repository: "123456789012.dkr.ecr.ap-south-1.amazonaws.com/fintech-devsecops/webhook-service"
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  name: "webhook-service-sa"
+  annotations:
+    # IRSA: IAM Role for Service Account
+    eks.amazonaws.com/role-arn: ""
+
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+resources:
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+containerSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+env:
+  DATABASE_URL: "sqlite+aiosqlite:///./webhook.db"
+  LOG_LEVEL: "INFO"
+  METRICS_ENABLED: "true"
+
+labels:
+  app.kubernetes.io/part-of: "fintech-devsecops"
+  app.kubernetes.io/managed-by: "argocd"
+  app.kubernetes.io/component: "webhook-service"
+
+networkPolicy:
+  enabled: true
+  ingressNamespaces:
+    - ingress-nginx
+    - monitoring
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
