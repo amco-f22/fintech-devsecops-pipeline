@@ -1,0 +1,30 @@
+version: 2
+updates:
+  - package-ecosystem: "terraform"
+    directory: "/terraform/modules/vpc"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "terraform"
+    directory: "/terraform/modules/eks"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "terraform"
+    directory: "/terraform/modules/ecr"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: "pip"
+    directory: "/services/webhook-service"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"

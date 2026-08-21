@@ -1,0 +1,253 @@
+# ==============================================================================
+# Weekly Compliance Scan — Scheduled Security Sweep
+# ==============================================================================
+# Runs every Monday at 06:00 UTC. Scans:
+# - Trivy: filesystem + config vulnerabilities
+# - tfsec: Terraform security posture
+# - pip-audit: Python dependency CVEs
+# - CIS Kubernetes: Checkov K8s benchmark
+#
+# Generates HTML/JSON report → artifact (365-day retention)
+# Auto-creates GitHub issue on critical findings
+# ==============================================================================
+
+name: Weekly Compliance Scan
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"  # Every Monday at 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      severity_threshold:
+        description: "Minimum severity to flag (CRITICAL/HIGH/MEDIUM)"
+        required: false
+        default: "HIGH"
+
+permissions:
+  contents: read
+  security-events: write
+  issues: write
+
+jobs:
+  # ──────────────────────────────────────────
+  # Job 1: Infrastructure Vulnerability Sweep
+  # ──────────────────────────────────────────
+  infra-sweep:
+    name: "🛡️ Infrastructure Sweep (Trivy)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: trivy-fs-results.json
+          severity: "${{ inputs.severity_threshold || 'HIGH' }},CRITICAL"
+
+      - name: Trivy config scan (IaC misconfigs)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          format: json
+          output: trivy-config-results.json
+
+      - name: Upload sweep results
+        uses: actions/upload-artifact@v4
+        with:
+          name: infra-sweep-${{ github.run_id }}
+          path: |
+            trivy-fs-results.json
+            trivy-config-results.json
+          retention-days: 90
+
+  # ──────────────────────────────────────────
+  # Job 2: Python Dependency Audit
+  # ──────────────────────────────────────────
+  dependency-audit:
+    name: "📦 Dependency Audit (pip-audit)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install audit tools
+        run: pip install pip-audit
+
+      - name: Run pip-audit
+        working-directory: services/webhook-service
+        run: |
+          pip install -r requirements.txt
+          pip-audit --format json --output ../../pip-audit.json || true
+          pip-audit --format cyclonedx-json --output ../../pip-audit-sbom.json || true
+
+      - name: Upload dependency audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-${{ github.run_id }}
+          path: |
+            pip-audit.json
+            pip-audit-sbom.json
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # ──────────────────────────────────────────
+  # Job 3: Terraform Security Posture
+  # ──────────────────────────────────────────
+  terraform-posture:
+    name: "🔍 Terraform Security (tfsec + Checkov)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install tfsec
+        run: |
+          curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
+      - name: Run tfsec
+        run: tfsec terraform/ --format json --out tfsec-results.json --soft-fail || true
+
+      - name: Run Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform/
+          framework: terraform
+          output_format: json
+          output_file_path: checkov-tf-results.json
+          soft_fail: true
+
+      - name: Upload posture results
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-posture-${{ github.run_id }}
+          path: |
+            tfsec-results.json
+            checkov-tf-results.json
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # ──────────────────────────────────────────
+  # Job 4: CIS Kubernetes Benchmark
+  # ──────────────────────────────────────────
+  cis-kubernetes:
+    name: "📋 CIS K8s Benchmark (Checkov)"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Checkov CIS K8s benchmark
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: k8s/
+          framework: kubernetes
+          output_format: json
+          output_file_path: cis-k8s-results.json
+          soft_fail: true
+
+      - name: Upload CIS results
+        uses: actions/upload-artifact@v4
+        with:
+          name: cis-benchmark-${{ github.run_id }}
+          path: cis-k8s-results.json
+          retention-days: 90
+          if-no-files-found: ignore
+
+  # ──────────────────────────────────────────
+  # Job 5: Aggregate Report + Auto-Issue
+  # ──────────────────────────────────────────
+  aggregate-report:
+    name: "📊 Compliance Report"
+    runs-on: ubuntu-latest
+    needs: [infra-sweep, dependency-audit, terraform-posture, cis-kubernetes]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: weekly-artifacts/
+
+      - name: Generate compliance report
+        run: |
+          python scripts/compliance_reporter.py --output-dir ./reports || true
+
+      - name: Upload compliance report
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-compliance-report-${{ github.run_id }}
+          path: reports/
+          retention-days: 365
+
+      - name: Create GitHub issue on critical findings
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let report;
+            try {
+              report = JSON.parse(fs.readFileSync('reports/compliance_report.json', 'utf8'));
+            } catch (e) {
+              console.log('No report file found, skipping issue creation');
+              return;
+            }
+
+            const failed = report.summary?.failed || 0;
+            const total = report.summary?.total_checks || 0;
+            const passed = report.summary?.passed || 0;
+            const score = total > 0 ? Math.round((passed / total) * 100) : 100;
+
+            if (failed > 0) {
+              const title = `[Weekly Security] Compliance score: ${score}% — ${failed} check(s) failed`;
+              const body = `## Weekly Compliance Scan Results\n\n` +
+                `**Run:** https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n` +
+                `**Date:** ${new Date().toISOString().split('T')[0]}\n` +
+                `**Score:** ${score}% (${passed}/${total} passed)\n\n` +
+                `### Failed Checks: ${failed}\n\n` +
+                `Review the full compliance report artifact and address findings.\n\n` +
+                `- [ ] Review critical vulnerabilities\n` +
+                `- [ ] Update dependency exceptions\n` +
+                `- [ ] Re-run compliance scan after fixes`;
+
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['security', 'compliance', 'weekly-scan']
+              });
+            }
+
+      - name: Post summary
+        if: always()
+        run: |
+          echo "## 📊 Weekly Compliance Scan" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Scan | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Trivy Infrastructure | ${{ needs.infra-sweep.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| pip-audit Dependencies | ${{ needs.dependency-audit.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| tfsec + Checkov Terraform | ${{ needs.terraform-posture.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| CIS K8s Benchmark | ${{ needs.cis-kubernetes.result }} |" >> $GITHUB_STEP_SUMMARY

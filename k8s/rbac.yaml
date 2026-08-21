@@ -1,0 +1,135 @@
+# ==============================================================================
+# Kubernetes RBAC — Least-Privilege Access for Fintech Workloads
+# ==============================================================================
+# - Namespace with Pod Security Admission (restricted profile)
+# - Dedicated ServiceAccount with IRSA
+# - Least-privilege Role (only configmaps, secrets by name, events)
+# - ArgoCD deployer SA with scoped deployment permissions
+# ==============================================================================
+
+# --- Namespace with Pod Security Admission (restricted) ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
+  labels:
+    kubernetes.io/metadata.name: payments
+    # Pod Security Standards — enforce "restricted" profile
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+---
+# --- Application ServiceAccount ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: webhook-service-sa
+  namespace: payments
+  labels:
+    app.kubernetes.io/name: webhook-service
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: fintech-devsecops
+  annotations:
+    # IRSA — pod-level AWS credentials via OIDC
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/webhook-service-sa-role
+    eks.amazonaws.com/token-expiration: "3600"
+automountServiceAccountToken: false
+---
+# --- Application Role (least privilege) ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: webhook-service-role
+  namespace: payments
+  labels:
+    app.kubernetes.io/name: webhook-service
+rules:
+  # Read own ConfigMaps (feature flags, runtime config)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["webhook-service-config"]
+    verbs: ["get", "watch"]
+  # Read own Secrets (TLS certs, DB credentials)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["webhook-service-tls", "webhook-service-secrets"]
+    verbs: ["get", "watch"]
+  # Pod self-inspection for graceful shutdown
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get"]
+  # Emit events for observability
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+# --- Application RoleBinding ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: webhook-service-rolebinding
+  namespace: payments
+  labels:
+    app.kubernetes.io/name: webhook-service
+subjects:
+  - kind: ServiceAccount
+    name: webhook-service-sa
+    namespace: payments
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: webhook-service-role
+---
+# --- ArgoCD Deployer ServiceAccount ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-deployer-sa
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-deployer
+    app.kubernetes.io/part-of: fintech-devsecops
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/argocd-deployer-role
+automountServiceAccountToken: false
+---
+# --- ArgoCD Deployer Role (scoped to payments namespace) ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-deployer-role
+  namespace: payments
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "serviceaccounts"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+# --- ArgoCD Deployer RoleBinding ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-deployer-rolebinding
+  namespace: payments
+subjects:
+  - kind: ServiceAccount
+    name: argocd-deployer-sa
+    namespace: argocd
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: argocd-deployer-role

@@ -13,6 +13,7 @@ fullnameOverride: ""
 serviceAccount:
   create: true
   name: "webhook-service-sa"
+  automountServiceAccountToken: false
   annotations:
     # IRSA: IAM Role for Service Account
     eks.amazonaws.com/role-arn: ""
@@ -48,21 +49,36 @@ readinessProbe:
   timeoutSeconds: 3
   failureThreshold: 3
 
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 0
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
+
 securityContext:
   runAsNonRoot: true
   runAsUser: 1000
+  runAsGroup: 1000
   fsGroup: 1000
-  readOnlyRootFilesystem: true
-  allowPrivilegeEscalation: false
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
 
 containerSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
+  runAsGroup: 1000
   readOnlyRootFilesystem: true
   allowPrivilegeEscalation: false
+  privileged: false
   capabilities:
     drop:
       - ALL
+  seccompProfile:
+    type: RuntimeDefault
 
 env:
   DATABASE_URL: "sqlite+aiosqlite:///./webhook.db"
@@ -74,14 +90,74 @@ labels:
   app.kubernetes.io/managed-by: "argocd"
   app.kubernetes.io/component: "webhook-service"
 
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"
+
+# --- Ingress ---
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "4m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: webhook.securepay.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: webhook-service-tls
+      hosts:
+        - webhook.securepay.example.com
+
+# --- NetworkPolicy ---
 networkPolicy:
   enabled: true
   ingressNamespaces:
     - ingress-nginx
     - monitoring
 
+# --- Autoscaling ---
 autoscaling:
-  enabled: false
+  enabled: true
   minReplicas: 2
   maxReplicas: 6
   targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# --- Topology Spread (avoid single-point-of-failure) ---
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: webhook-service
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: webhook-service
+
+# --- Pod Anti-Affinity ---
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: webhook-service
+          topologyKey: kubernetes.io/hostname
+
+nodeSelector:
+  kubernetes.io/os: linux
+
+tolerations: []
