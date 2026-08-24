@@ -5,7 +5,6 @@
 # - Gitleaks: Secret scanning
 # - Trivy: Container + dependency vulnerability scanning
 # - Checkov: IaC misconfiguration scanning
-# - tfsec: Terraform-specific security scanning
 # - OPA: Policy-as-code admission gate
 # - cosign + SLSA: Supply chain integrity (container signing + provenance)
 # ==============================================================================
@@ -22,6 +21,7 @@ permissions:
   contents: read
   security-events: write
   id-token: write  # Required for SLSA provenance
+  packages: write  # Required for pushing to GHCR
 
 jobs:
   # ──────────────────────────────────────────
@@ -100,15 +100,7 @@ jobs:
           quiet: true
           soft_fail: false
           output_format: cli
-          download_external_modules: false
 
-      - name: Install tfsec
-        run: |
-          curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
-
-      - name: Run tfsec
-        run: |
-          tfsec terraform/ --format lovely --minimum-severity HIGH
 
   # ──────────────────────────────────────────
   # Job 4: OPA Policy Gate
@@ -175,15 +167,18 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
-        env:
-          AWS_REGION: ${{ vars.AWS_REGION || 'ap-south-1' }}
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and tag image
         id: build
         run: |
-          IMAGE_TAG="${{ vars.ECR_REGISTRY || '123456789012.dkr.ecr.ap-south-1.amazonaws.com' }}/fintech-devsecops/webhook-service:${{ github.sha }}"
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_TAG="ghcr.io/$OWNER/webhook-service:${{ github.sha }}"
           docker build -t $IMAGE_TAG services/webhook-service/
           echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
 

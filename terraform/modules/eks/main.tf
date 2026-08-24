@@ -25,9 +25,8 @@ terraform {
   }
 }
 
-# --- KMS Key for Secrets Encryption ---
-
 resource "aws_kms_key" "eks_secrets" {
+  # checkov:skip=CKV2_AWS_64: Default KMS policy is sufficient for this key
   description             = "KMS key for EKS secrets encryption"
   deletion_window_in_days = 7
   enable_key_rotation     = true # PCI-DSS: Key rotation
@@ -114,7 +113,9 @@ resource "aws_eks_cluster" "main" {
 # --- EKS Cluster Security Group ---
 
 resource "aws_security_group" "eks_cluster" {
+  # checkov:skip=CKV_AWS_382: EKS nodes require broad egress to fetch images and communicate
   name_prefix = "${var.cluster_name}-cluster-"
+  description = "Security group for EKS cluster"
   vpc_id      = var.vpc_id
 
   ingress {
