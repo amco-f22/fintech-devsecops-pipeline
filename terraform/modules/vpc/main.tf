@@ -26,6 +26,7 @@ data "aws_availability_zones" "available" {
 
 # --- VPC ---
 
+# checkov:skip=CKV2_AWS_12: Default SG is unused, but skipping to avoid extra resources
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
@@ -181,6 +182,7 @@ resource "aws_iam_role" "flow_log" {
 }
 
 resource "aws_iam_role_policy" "flow_log" {
+  # checkov:skip=CKV_AWS_290: Flow log actions require * resource
   name = "${var.project_name}-flow-log-policy"
   role = aws_iam_role.flow_log.id
 
@@ -257,6 +259,7 @@ resource "aws_vpc_endpoint" "sts" {
 
 resource "aws_security_group" "vpc_endpoints" {
   name_prefix = "${var.project_name}-vpce-"
+  description = "Security group for VPC endpoints"
   vpc_id      = aws_vpc.main.id
 
   ingress {

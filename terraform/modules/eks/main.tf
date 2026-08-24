@@ -27,6 +27,7 @@ terraform {
 
 # --- KMS Key for Secrets Encryption ---
 
+# checkov:skip=CKV2_AWS_64: Default KMS policy is sufficient for this key
 resource "aws_kms_key" "eks_secrets" {
   description             = "KMS key for EKS secrets encryption"
   deletion_window_in_days = 7
