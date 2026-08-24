@@ -15,6 +15,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -277,13 +278,21 @@ async def metrics():
     )
 
 
-@app.get("/", include_in_schema=False)
-async def root():
-    """Root redirect to API docs."""
-    return {
-        "service": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-        "docs": "/docs",
-        "health": "/health",
-        "metrics": "/metrics",
-    }
+@app.get("/", response_class=HTMLResponse)
+def dashboard():
+    return """
+    <html>
+        <head><title>SecurePay Webhook Monitor</title></head>
+        <body style="font-family: sans-serif; max-width: 800px; margin: 40px auto;">
+            <h1>🛡️ Payment Webhook Service</h1>
+            <p><strong>Status:</strong> ✅ Operational</p>
+            <p><strong>Endpoints:</strong></p>
+            <ul>
+                <li><code>POST /webhook/transaction</code> — Receive payment events</li>
+                <li><code>GET /health</code> — Health check</li>
+                <li><code>GET /metrics</code> — Prometheus metrics</li>
+            </ul>
+            <p><strong>Pipeline:</strong> Pytest → Trivy → Checkov → OPA → cosign → ArgoCD → EKS</p>
+        </body>
+    </html>
+    """
