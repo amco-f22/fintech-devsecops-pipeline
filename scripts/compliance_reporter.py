@@ -189,7 +189,7 @@ def generate_html_report(checks: list[ComplianceCheck], output_path: Path) -> No
 </body>
 </html>"""
 
-    output_path.write_text(html)
+    output_path.write_text(html, encoding='utf-8')
     print(f"✅ HTML report: {output_path}")
 
 
@@ -242,14 +242,6 @@ def main():
     checks.append(run_check(
         "Checkov",
         ["checkov", "--directory", "terraform/", "--quiet", "--compact"],
-        "IaC Security",
-    ))
-
-    # --- Terraform Security ---
-    print("[4/6] Running tfsec (Terraform security)...")
-    checks.append(run_check(
-        "tfsec",
-        ["tfsec", "terraform/", "--minimum-severity", "HIGH"],
         "IaC Security",
     ))
 

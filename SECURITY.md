@@ -20,7 +20,7 @@ This project implements the following security controls:
 
 - **Secret scanning** — Gitleaks runs on every push
 - **Container scanning** — Trivy scans images for CVEs
-- **IaC scanning** — Checkov + tfsec validate Terraform
+- **IaC scanning** — Checkov validates Terraform
 - **Policy-as-code** — OPA/Rego admission policies
 - **Supply chain** — cosign signing + SLSA L3 provenance
 - **Dependency updates** — Dependabot monitors Terraform and GitHub Actions

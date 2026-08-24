@@ -8,7 +8,7 @@ Built for high-uptime payment environments like merchant payment gateways, insta
 ![IaC](https://img.shields.io/badge/IaC-Terraform%201.9-purple?style=for-the-badge)
 ![K8s](https://img.shields.io/badge/K8s-EKS%201.30-326CE5?style=for-the-badge)
 ![GitOps](https://img.shields.io/badge/GitOps-ArgoCD-orange?style=for-the-badge)
-![Supply Chain](https://img.shields.io/badge/Supply%20Chain-SLSA%20L3%20%2B%20cosign-green?style=for-the-badge)
+![Supply Chain](https://img.shields.io/badge/Supply%20Chain-Build%20Attestation%20%2B%20cosign-green?style=for-the-badge)
 
 ---
 
@@ -25,9 +25,9 @@ Built for high-uptime payment environments like merchant payment gateways, insta
 │  │  Quality Gate │───▶│  Security    │───▶│  Supply Chain│           │
 │  │              │    │  Gates       │    │  Integrity   │           │
 │  │  • Pytest    │    │  • Gitleaks  │    │  • cosign    │           │
-│  │  • OPA Tests │    │  • Trivy    │    │  • SLSA L3   │           │
+│  │  • OPA Tests │    │  • Trivy    │    │  • Attestation│           │
 │  │  • TF Valid  │    │  • Checkov  │    │  • Provenance│           │
-│  │  • Helm Lint │    │  • tfsec    │    │              │           │
+│  │  • Helm Lint │    │             │    │              │           │
 │  └──────┬───────┘    │  • OPA Gate │    └──────┬───────┘           │
 │         │            └──────┬───────┘           │                   │
 │         │                   │                   │                   │
@@ -130,7 +130,7 @@ fintech-devsecops-pipeline/
 │
 ├── .github/workflows/
 │   ├── ci-quality.yml             # Quality gates (Pytest, OPA, TF validate, Helm lint)
-│   └── ci-security.yml            # Security gates (Gitleaks, Trivy, Checkov, tfsec, cosign, SLSA)
+│   └── ci-security.yml            # Security gates (Gitleaks, Trivy, Checkov, cosign, Attestation)
 │
 ├── scripts/
 │   └── compliance_reporter.py     # Automated compliance sweep + HTML/JSON reports
@@ -150,10 +150,10 @@ fintech-devsecops-pipeline/
 |------|------|-----------------|
 | Secret Scanning | **Gitleaks** | Leaked credentials, API keys, private keys in commits |
 | Container Scanning | **Trivy** | CVEs in base images and Python dependencies |
-| IaC Scanning | **Checkov + tfsec** | Terraform misconfigurations (public S3, unencrypted RDS, etc.) |
+| IaC Scanning | **Checkov** | Terraform misconfigurations (public S3, unencrypted RDS, etc.) |
 | Policy Gate | **OPA/Rego** | Non-compliant K8s manifests (privileged pods, missing probes) |
 | Container Signing | **cosign** | Tamper-proof image verification via Sigstore |
-| Build Provenance | **SLSA Level 3** | Cryptographic proof that artifacts came from this CI pipeline |
+| Build Provenance | **Build Attestation** | Cryptographic proof that artifacts came from this CI pipeline |
 
 ### Quality Gates (Shift-Left)
 
@@ -258,8 +258,8 @@ Generates:
 | **CI/CD** | GitHub Actions (quality + security gates) |
 | **Packaging** | Docker (multi-stage), Helm 3 |
 | **Delivery** | ArgoCD (GitOps, auto-sync, self-heal) |
-| **Supply Chain** | cosign (Sigstore), SLSA Level 3 provenance |
-| **Scanning** | Gitleaks, Trivy, Checkov, tfsec, TFLint |
+| **Supply Chain** | cosign (Sigstore), Build Attestation |
+| **Scanning** | Gitleaks, Trivy, Checkov, TFLint |
 
 ---
 

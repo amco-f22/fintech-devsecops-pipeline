@@ -41,7 +41,7 @@ practices enforce compliance in a payment processing environment.
 | Control | Implementation | Evidence |
 |---------|---------------|----------|
 | Dependency scanning | Trivy scans container images and Python deps | `.github/workflows/ci-security.yml` |
-| Static analysis (IaC) | Checkov + tfsec scan Terraform for misconfigs | `.github/workflows/ci-security.yml` |
+| Static analysis (IaC) | Checkov scans Terraform for misconfigs | `.github/workflows/ci-security.yml` |
 | Secret scanning | Gitleaks scans full git history | `.github/workflows/ci-security.yml` |
 | Automated testing | Pytest quality gate runs before security gates | `.github/workflows/ci-quality.yml` |
 | Immutable artifacts | ECR image_tag_mutability = IMMUTABLE | `terraform/modules/ecr/main.tf` |

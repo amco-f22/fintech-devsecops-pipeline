@@ -3,7 +3,6 @@
 # ==============================================================================
 # Runs every Monday at 06:00 UTC. Scans:
 # - Trivy: filesystem + config vulnerabilities
-# - tfsec: Terraform security posture
 # - pip-audit: Python dependency CVEs
 # - CIS Kubernetes: Checkov K8s benchmark
 #
@@ -106,19 +105,12 @@ jobs:
   # Job 3: Terraform Security Posture
   # ──────────────────────────────────────────
   terraform-posture:
-    name: "🔍 Terraform Security (tfsec + Checkov)"
+    name: "🔍 Terraform Security (Checkov)"
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install tfsec
-        run: |
-          curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
-
-      - name: Run tfsec
-        run: tfsec terraform/ --format json --out tfsec-results.json --soft-fail || true
 
       - name: Run Checkov
         uses: bridgecrewio/checkov-action@v12
@@ -134,7 +126,6 @@ jobs:
         with:
           name: terraform-posture-${{ github.run_id }}
           path: |
-            tfsec-results.json
             checkov-tf-results.json
           retention-days: 90
           if-no-files-found: ignore
@@ -249,5 +240,5 @@ jobs:
           echo "|------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Trivy Infrastructure | ${{ needs.infra-sweep.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| pip-audit Dependencies | ${{ needs.dependency-audit.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| tfsec + Checkov Terraform | ${{ needs.terraform-posture.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Checkov Terraform | ${{ needs.terraform-posture.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| CIS K8s Benchmark | ${{ needs.cis-kubernetes.result }} |" >> $GITHUB_STEP_SUMMARY

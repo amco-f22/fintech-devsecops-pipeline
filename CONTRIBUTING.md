@@ -13,7 +13,7 @@ Thank you for considering contributing to the Fintech DevSecOps Pipeline.
 ### Terraform
 - Run `terraform fmt` before committing
 - Run `terraform validate` on modified modules
-- Ensure Checkov and tfsec produce no new HIGH/CRITICAL findings
+- Ensure Checkov produces no new HIGH/CRITICAL findings
 
 ### OPA/Rego Policies
 - Write unit tests for every new `deny` rule in `policies/tests/`
